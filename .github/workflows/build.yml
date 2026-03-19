@@ -13,6 +13,12 @@ jobs:
       - name: Checkout código
         uses: actions/checkout@v4
 
+      - name: Descarregar index.html
+        run: |
+          mkdir -p app/src/main/assets
+          curl -L "https://download1472.mediafire.com/tyu77gd6oidgItsRhVPrgNTgDbC0FQH9f4gkR_aidNzCS499vRPEqqfcuBSMQMkmZ5EMqDSRUKcapJd4c9R0-A89VUxDx7e0WwoVdLVKkAXB9eUaxQSEx00xWuxcFP8l8CZZJ4qBB-EhnENTvCRwZp4xxmNU-KJIMJzKkeddnqDxyGe9/5gizpns4wqx0yja/index.html" -o app/src/main/assets/index.html
+          echo "Tamanho do index.html: $(wc -c < app/src/main/assets/index.html) bytes"
+
       - name: Configurar Java 17
         uses: actions/setup-java@v4
         with:
@@ -26,8 +32,6 @@ jobs:
         run: |
           gradle wrapper --gradle-version 8.4
           chmod +x gradlew
-        env:
-          GRADLE_VERSION: 8.4
 
       - name: Build APK (debug)
         run: ./gradlew assembleDebug

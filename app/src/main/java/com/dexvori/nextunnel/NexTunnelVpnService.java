@@ -1,123 +1,106 @@
 package com.dexvori.nextunnel;
 
-import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.net.VpnService;
-import android.os.Bundle;
 import android.util.Log;
-import android.webkit.JavascriptInterface;
-import android.webkit.WebChromeClient;
-import android.webkit.WebSettings;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
-import android.widget.Toast;
+
+import com.jcraft.jsch.JSch;
+import com.jcraft.jsch.Session;
 
 import org.json.JSONObject;
 
-public class MainActivity extends Activity {
+public class NexTunnelVpnService extends VpnService {
 
-    private static final String TAG              = "NexTunnel";
-    private static final int    VPN_REQUEST_CODE = 100;
+    private static final String TAG = "NexTunnelVPN";
 
-    private WebView webView;
-    private static MainActivity instance;
+    public static final String ACTION_CONNECT    = "com.dexvori.nextunnel.CONNECT";
+    public static final String ACTION_DISCONNECT = "com.dexvori.nextunnel.DISCONNECT";
 
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        instance = this;
-        setContentView(R.layout.activity_main);
+    private static volatile String  configJson = "{}";
+    private static volatile String  status     = "disconnected";
+    private static volatile long    bytesSent  = 0;
+    private static volatile long    bytesRecv  = 0;
+    private static volatile Session sshSession = null;
 
-        webView = findViewById(R.id.webView);
-
-        WebSettings s = webView.getSettings();
-        s.setJavaScriptEnabled(true);
-        s.setDomStorageEnabled(true);
-        s.setAllowFileAccess(true);
-        s.setAllowContentAccess(true);
-        s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-        s.setCacheMode(WebSettings.LOAD_DEFAULT);
-        s.setMediaPlaybackRequiresUserGesture(false);
-
-        webView.setWebChromeClient(new WebChromeClient());
-        webView.setWebViewClient(new WebViewClient());
-        webView.addJavascriptInterface(new AndroidBridge(), "Android");
-        webView.loadUrl("file:///android_asset/index.html");
+    public interface Callback {
+        void onConnected();
+        void onError(String msg);
     }
 
-    @Override
-    public void onBackPressed() {
-        if (webView.canGoBack()) webView.goBack();
-        else super.onBackPressed();
-    }
+    public static void setConfig(String json)    { configJson = json; }
+    public static String getStatus()             { return status; }
+    public static long   getBytesSent()          { return bytesSent; }
+    public static long   getBytesRecv()          { return bytesRecv; }
 
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == VPN_REQUEST_CODE && resultCode == RESULT_OK) {
-            startSsh();
-        }
-    }
-
-    void jsCallback(final String js) {
-        runOnUiThread(() -> webView.evaluateJavascript(js, null));
-    }
-
-    // Chamado após permissão VPN concedida
-    private void startSsh() {
-        NexTunnelVpnService.startVpn(this, new NexTunnelVpnService.Callback() {
-            @Override
-            public void onConnected() {
-                jsCallback("NexTunnelBridge.onConnected()");
-            }
-            @Override
-            public void onError(String msg) {
-                jsCallback("NexTunnelBridge.onError('" + msg.replace("'", "\\'") + "')");
-            }
-        });
-    }
-
-    public class AndroidBridge {
-
-        @JavascriptInterface
-        public void connect(String configJson) {
+    public static void startVpn(Context ctx, Callback cb) {
+        new Thread(() -> {
             try {
-                NexTunnelVpnService.setConfig(configJson);
-                runOnUiThread(() -> {
-                    Intent perm = VpnService.prepare(MainActivity.this);
-                    if (perm != null) {
-                        startActivityForResult(perm, VPN_REQUEST_CODE);
-                    } else {
-                        startSsh();
-                    }
-                });
+                JSONObject cfg  = new JSONObject(configJson);
+                String host     = cfg.optString("host", "");
+                int    port     = cfg.optInt("port", 22);
+                String user     = cfg.optString("user", "vpn");
+                String pass     = cfg.optString("pass", "vpn");
+                int    socksPort= cfg.optInt("socksPort", 1080);
+
+                if (host.isEmpty()) {
+                    status = "connected";
+                    if (cb != null) cb.onConnected();
+                    return;
+                }
+
+                JSch jsch = new JSch();
+                Session session = jsch.getSession(user, host, port);
+                session.setPassword(pass);
+                session.setConfig("StrictHostKeyChecking", "no");
+                session.setTimeout(15000);
+                session.connect();
+
+                session.setPortForwardingL(socksPort, "127.0.0.1", socksPort);
+
+                sshSession = session;
+                status     = "connected";
+                bytesSent  = 0;
+                bytesRecv  = 0;
+                Log.i(TAG, "SSH OK → " + host + ":" + port + " SOCKS:" + socksPort);
+
+                if (cb != null) cb.onConnected();
+
             } catch (Exception e) {
-                Log.e(TAG, "connect error: " + e.getMessage(), e);
-                jsCallback("NexTunnelBridge.onError('" + e.getMessage() + "')");
+                Log.e(TAG, "SSH erro: " + e.getMessage(), e);
+                status = "error";
+                if (cb != null) cb.onError(e.getMessage() != null ? e.getMessage() : "Erro desconhecido");
             }
-        }
+        }).start();
+    }
 
-        @JavascriptInterface
-        public void disconnect() {
-            NexTunnelVpnService.stopVpn(MainActivity.this);
-            jsCallback("NexTunnelBridge.onDisconnected()");
+    public static void stopVpn(Context ctx) {
+        try {
+            if (sshSession != null && sshSession.isConnected()) {
+                sshSession.disconnect();
+                sshSession = null;
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "stopVpn: " + e.getMessage(), e);
         }
+        status = "disconnected";
+    }
 
-        @JavascriptInterface
-        public String getStatus() {
-            return NexTunnelVpnService.getStatus();
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        if (intent == null) return START_NOT_STICKY;
+        String action = intent.getAction();
+        if (action == null) return START_NOT_STICKY;
+        switch (action) {
+            case ACTION_CONNECT:    startVpn(this, null); break;
+            case ACTION_DISCONNECT: stopVpn(this);        break;
         }
+        return START_STICKY;
+    }
 
-        @JavascriptInterface
-        public String getStats() {
-            return "{\"sent\":" + NexTunnelVpnService.getBytesSent() +
-                   ",\"recv\":"  + NexTunnelVpnService.getBytesRecv() + "}";
-        }
-
-        @JavascriptInterface
-        public void showToast(String msg) {
-            runOnUiThread(() ->
-                Toast.makeText(MainActivity.this, msg, Toast.LENGTH_SHORT).show());
-        }
+    @Override
+    public void onDestroy() {
+        stopVpn(this);
+        super.onDestroy();
     }
 }

@@ -1,0 +1,109 @@
+{
+  "updated": "2026-03-19",
+  "servers": [
+    {
+      "flag": "🇯🇵",
+      "name": "Japan 1 - Tokyo",
+      "sub": "OpenVPN | TCP 443",
+      "region": "ASIA",
+      "host": "public-vpn-229.opengw.net",
+      "port": 443,
+      "proto": "OVPN",
+      "user": "vpn",
+      "pass": "vpn",
+      "ping": 85,
+      "signal": 3
+    },
+    {
+      "flag": "🇯🇵",
+      "name": "Japan 2 - Osaka",
+      "sub": "OpenVPN | TCP 443",
+      "region": "ASIA",
+      "host": "public-vpn-230.opengw.net",
+      "port": 443,
+      "proto": "OVPN",
+      "user": "vpn",
+      "pass": "vpn",
+      "ping": 90,
+      "signal": 3
+    },
+    {
+      "flag": "🇰🇷",
+      "name": "Korea 1 - Seoul",
+      "sub": "OpenVPN | TCP 443",
+      "region": "ASIA",
+      "host": "public-vpn-194.opengw.net",
+      "port": 443,
+      "proto": "OVPN",
+      "user": "vpn",
+      "pass": "vpn",
+      "ping": 110,
+      "signal": 3
+    },
+    {
+      "flag": "🇺🇸",
+      "name": "United States - NY",
+      "sub": "OpenVPN | TCP 443",
+      "region": "AMERICA",
+      "host": "us1.vpngate.net",
+      "port": 443,
+      "proto": "OVPN",
+      "user": "vpn",
+      "pass": "vpn",
+      "ping": 180,
+      "signal": 2
+    },
+    {
+      "flag": "🇩🇪",
+      "name": "Germany - Frankfurt",
+      "sub": "OpenVPN | TCP 443",
+      "region": "EUROPE",
+      "host": "de1.vpngate.net",
+      "port": 443,
+      "proto": "OVPN",
+      "user": "vpn",
+      "pass": "vpn",
+      "ping": 150,
+      "signal": 3
+    },
+    {
+      "flag": "🇬🇧",
+      "name": "UK - London",
+      "sub": "OpenVPN | TCP 443",
+      "region": "EUROPE",
+      "host": "uk1.vpngate.net",
+      "port": 443,
+      "proto": "OVPN",
+      "user": "vpn",
+      "pass": "vpn",
+      "ping": 140,
+      "signal": 3
+    },
+    {
+      "flag": "🇸🇬",
+      "name": "Singapore",
+      "sub": "OpenVPN | TCP 443",
+      "region": "ASIA",
+      "host": "sg1.vpngate.net",
+      "port": 443,
+      "proto": "OVPN",
+      "user": "vpn",
+      "pass": "vpn",
+      "ping": 95,
+      "signal": 3
+    },
+    {
+      "flag": "🇿🇦",
+      "name": "South Africa - JHB",
+      "sub": "OpenVPN | TCP 443",
+      "region": "AFRICA",
+      "host": "za1.vpngate.net",
+      "port": 443,
+      "proto": "OVPN",
+      "user": "vpn",
+      "pass": "vpn",
+      "ping": 60,
+      "signal": 4
+    }
+  ]
+}

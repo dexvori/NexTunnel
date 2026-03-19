@@ -12,8 +12,6 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
 
-import org.json.JSONObject;
-
 public class MainActivity extends Activity {
 
     private static final String TAG              = "NexTunnel";
@@ -35,7 +33,6 @@ public class MainActivity extends Activity {
         s.setAllowContentAccess(true);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         s.setCacheMode(WebSettings.LOAD_DEFAULT);
-        s.setMediaPlaybackRequiresUserGesture(false);
 
         webView.setWebChromeClient(new WebChromeClient());
         webView.setWebViewClient(new WebViewClient());
@@ -53,8 +50,7 @@ public class MainActivity extends Activity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == VPN_REQUEST_CODE && resultCode == RESULT_OK) {
-            NexTunnelVpnService.startVpn(this);
-            jsCallback("NexTunnelBridge.onConnected()");
+            startSsh();
         }
     }
 
@@ -62,21 +58,31 @@ public class MainActivity extends Activity {
         runOnUiThread(() -> webView.evaluateJavascript(js, null));
     }
 
+    private void startSsh() {
+        NexTunnelVpnService.startVpn(this, new NexTunnelVpnService.Callback() {
+            @Override
+            public void onConnected() {
+                jsCallback("NexTunnelBridge.onConnected()");
+            }
+            @Override
+            public void onError(String msg) {
+                jsCallback("NexTunnelBridge.onError('" + msg.replace("'", "\\'") + "')");
+            }
+        });
+    }
+
     public class AndroidBridge {
 
         @JavascriptInterface
         public void connect(String configJson) {
             try {
-                JSONObject cfg = new JSONObject(configJson);
                 NexTunnelVpnService.setConfig(configJson);
-
                 runOnUiThread(() -> {
                     Intent perm = VpnService.prepare(MainActivity.this);
                     if (perm != null) {
                         startActivityForResult(perm, VPN_REQUEST_CODE);
                     } else {
-                        NexTunnelVpnService.startVpn(MainActivity.this);
-                        jsCallback("NexTunnelBridge.onConnected()");
+                        startSsh();
                     }
                 });
             } catch (Exception e) {

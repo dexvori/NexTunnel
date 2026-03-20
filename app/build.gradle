@@ -47,6 +47,6 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.11.0'
 
-    // V2Ray Core
-    implementation 'com.github.2dust:AndroidLibV2rayLite:1.0.57'
+    // V2Ray Core (AAR local)
+    implementation fileTree(dir: 'libs', include: ['*.aar', '*.jar'])
 }

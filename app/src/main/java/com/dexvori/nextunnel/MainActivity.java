@@ -1,9 +1,13 @@
 package com.dexvori.nextunnel;
 
 import android.app.Activity;
+import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
+import android.content.ServiceConnection;
 import android.net.VpnService;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.util.Log;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
@@ -18,6 +22,21 @@ public class MainActivity extends Activity {
     private static final int    VPN_REQUEST_CODE = 100;
 
     private WebView webView;
+    private NexTunnelVpnService vpnService;
+    private boolean serviceBound = false;
+
+    private final ServiceConnection serviceConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder binder) {
+            serviceBound = true;
+            Log.i(TAG, "VPN Service conectado");
+        }
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            serviceBound = false;
+            vpnService = null;
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -38,6 +57,20 @@ public class MainActivity extends Activity {
         webView.setWebViewClient(new WebViewClient());
         webView.addJavascriptInterface(new AndroidBridge(), "Android");
         webView.loadUrl("file:///android_asset/index.html");
+
+        // Iniciar e ligar ao serviço
+        Intent serviceIntent = new Intent(this, NexTunnelVpnService.class);
+        startService(serviceIntent);
+        bindService(serviceIntent, serviceConnection, Context.BIND_AUTO_CREATE);
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (serviceBound) {
+            unbindService(serviceConnection);
+            serviceBound = false;
+        }
+        super.onDestroy();
     }
 
     @Override
@@ -50,7 +83,7 @@ public class MainActivity extends Activity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == VPN_REQUEST_CODE && resultCode == RESULT_OK) {
-            startSsh();
+            startV2Ray();
         }
     }
 
@@ -58,8 +91,12 @@ public class MainActivity extends Activity {
         runOnUiThread(() -> webView.evaluateJavascript(js, null));
     }
 
-    private void startSsh() {
-        NexTunnelVpnService.startVpn(this, new NexTunnelVpnService.Callback() {
+    private void startV2Ray() {
+        Intent intent = new Intent(this, NexTunnelVpnService.class);
+        intent.setAction("com.dexvori.nextunnel.CONNECT");
+        startService(intent);
+
+        NexTunnelVpnService.startVpn(null, new NexTunnelVpnService.Callback() {
             @Override
             public void onConnected() {
                 jsCallback("NexTunnelBridge.onConnected()");
@@ -82,7 +119,7 @@ public class MainActivity extends Activity {
                     if (perm != null) {
                         startActivityForResult(perm, VPN_REQUEST_CODE);
                     } else {
-                        startSsh();
+                        startV2Ray();
                     }
                 });
             } catch (Exception e) {
@@ -93,7 +130,9 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void disconnect() {
-            NexTunnelVpnService.stopVpn(MainActivity.this);
+            Intent intent = new Intent(MainActivity.this, NexTunnelVpnService.class);
+            intent.setAction("com.dexvori.nextunnel.DISCONNECT");
+            startService(intent);
             jsCallback("NexTunnelBridge.onDisconnected()");
         }
 

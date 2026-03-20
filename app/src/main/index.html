@@ -3535,8 +3535,9 @@ function parseExternalConfig(raw) {
         const name = v.ps || v.remarks || v.name || `VMess · ${host}`;
         if (validHost(host)) {
           return { n: name, h: host, p: port, uuid: v.id||'', user: v.id||'',
-                   mo: 'V2RAY', sn: v.sni||v.host||host, path: v.path||'/ws',
-                   ms: `VMess · ${v.net||'tcp'} · ${host}:${port}`, _proto:'V2RAY' };
+         mo: 'V2RAY', sn: v.sni||v.host||host, path: v.path||'/ws',
+         ms: `VMess · ${v.net||'tcp'} · ${host}:${port}`, _proto:'V2RAY',
+         _v2ray_json: JSON.stringify({log:{loglevel:'warning'},inbounds:[{tag:'socks',port:10808,protocol:'socks',settings:{auth:'noauth',udp:true},sniffing:{enabled:true,destOverride:['http','tls']}}],outbounds:[{tag:'proxy',protocol:'vmess',settings:{vnext:[{address:host,port:port,users:[{id:v.id||'',alterId:parseInt(v.aid)||0,security:v.scy||'auto'}]}]},streamSettings:{network:v.net||'tcp',security:v.tls||'',tlsSettings:{serverName:v.sni||v.host||host,allowInsecure:true},wsSettings:{path:v.path||'/ws',headers:{Host:v.host||host}}},mux:{enabled:false}},{protocol:'freedom',tag:'direct'}],routing:{domainStrategy:'IPIfNonMatch',rules:[]}}) };
         }
       } catch(e) {}
     }

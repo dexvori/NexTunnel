@@ -45,7 +45,7 @@ public class NexTunnelVpnService extends VpnService {
                     throw new Exception("Falha ao criar interface TUN");
                 }
 
-                int tunFd = svc.tunInterface.getFd();
+                long tunFd = (long) svc.tunInterface.getFd();
 
                 coreController = Libv2ray.newCoreController(new CoreCallbackHandler() {
                     public long startup() {

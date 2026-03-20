@@ -1,84 +1,102 @@
 package com.dexvori.nextunnel;
 
-import android.content.Context;
 import android.content.Intent;
 import android.net.VpnService;
 import android.util.Log;
 
-import com.jcraft.jsch.JSch;
-import com.jcraft.jsch.Session;
-
-import org.json.JSONObject;
+import go.Seq;
+import libv2ray.Libv2ray;
+import libv2ray.V2RayPoint;
+import libv2ray.V2RayVPNServiceSupportsSet;
 
 public class NexTunnelVpnService extends VpnService {
 
     private static final String TAG = "NexTunnelVPN";
 
-    public static final String ACTION_CONNECT    = "com.dexvori.nextunnel.CONNECT";
-    public static final String ACTION_DISCONNECT = "com.dexvori.nextunnel.DISCONNECT";
+    private static volatile String configJson = "{}";
+    private static volatile String status     = "disconnected";
+    private static volatile long   bytesSent  = 0;
+    private static volatile long   bytesRecv  = 0;
 
-    private static volatile String  configJson = "{}";
-    private static volatile String  status     = "disconnected";
-    private static volatile long    bytesSent  = 0;
-    private static volatile long    bytesRecv  = 0;
-    private static volatile Session sshSession = null;
+    private static V2RayPoint v2rayPoint;
 
     public interface Callback {
         void onConnected();
         void onError(String msg);
     }
 
-    public static void setConfig(String json)    { configJson = json; }
-    public static String getStatus()             { return status; }
-    public static long   getBytesSent()          { return bytesSent; }
-    public static long   getBytesRecv()          { return bytesRecv; }
+    public static void setConfig(String json) { configJson = json; }
+    public static String getStatus()          { return status; }
+    public static long   getBytesSent()       { return bytesSent; }
+    public static long   getBytesRecv()       { return bytesRecv; }
 
-    public static void startVpn(Context ctx, Callback cb) {
+    public static void startVpn(NexTunnelVpnService svc, Callback cb) {
         new Thread(() -> {
             try {
-                JSONObject cfg  = new JSONObject(configJson);
-                String host     = cfg.optString("host", "");
-                int    port     = cfg.optInt("port", 22);
-                String user     = cfg.optString("user", "vpn");
-                String pass     = cfg.optString("pass", "vpn");
-                int    socksPort= cfg.optInt("socksPort", 1080);
+                Seq.setContext(svc);
 
-                if (host.isEmpty()) {
-                    status = "connected";
-                    if (cb != null) cb.onConnected();
-                    return;
-                }
+                v2rayPoint = Libv2ray.newV2RayPoint(new V2RayVPNServiceSupportsSet() {
+                    @Override
+                    public boolean isVpnLaunched() {
+                        return svc != null;
+                    }
 
-                JSch jsch = new JSch();
-                Session session = jsch.getSession(user, host, port);
-                session.setPassword(pass);
-                session.setConfig("StrictHostKeyChecking", "no");
-                session.setTimeout(15000);
-                session.connect();
+                    @Override
+                    public void onEmitStatus(long l, String s) {
+                        Log.i(TAG, "V2Ray status: " + s);
+                    }
 
-                session.setPortForwardingL(socksPort, "127.0.0.1", socksPort);
+                    @Override
+                    public void shutdown() {
+                        stopVpn(svc);
+                    }
 
-                sshSession = session;
-                status     = "connected";
-                bytesSent  = 0;
-                bytesRecv  = 0;
-                Log.i(TAG, "SSH OK → " + host + ":" + port + " SOCKS:" + socksPort);
+                    @Override
+                    public String getVpnInterfaceName() {
+                        return "tun0";
+                    }
 
+                    @Override
+                    public boolean protect(long fd) {
+                        return svc.protect((int) fd);
+                    }
+
+                    @Override
+                    public String getDnsServers() {
+                        return "1.1.1.1,8.8.8.8";
+                    }
+
+                    @Override
+                    public String getExcludedOutboundTags() {
+                        return "";
+                    }
+
+                    @Override
+                    public String getEnabledExtension() {
+                        return "";
+                    }
+                }, false);
+
+                v2rayPoint.setConfigureFileContent(configJson);
+                v2rayPoint.runLoop(false);
+
+                status = "connected";
+                Log.i(TAG, "V2Ray iniciado com sucesso");
                 if (cb != null) cb.onConnected();
 
             } catch (Exception e) {
-                Log.e(TAG, "SSH erro: " + e.getMessage(), e);
+                Log.e(TAG, "V2Ray erro: " + e.getMessage(), e);
                 status = "error";
                 if (cb != null) cb.onError(e.getMessage() != null ? e.getMessage() : "Erro desconhecido");
             }
         }).start();
     }
 
-    public static void stopVpn(Context ctx) {
+    public static void stopVpn(NexTunnelVpnService svc) {
         try {
-            if (sshSession != null && sshSession.isConnected()) {
-                sshSession.disconnect();
-                sshSession = null;
+            if (v2rayPoint != null) {
+                v2rayPoint.stopLoop();
+                v2rayPoint = null;
             }
         } catch (Exception e) {
             Log.e(TAG, "stopVpn: " + e.getMessage(), e);
@@ -92,8 +110,8 @@ public class NexTunnelVpnService extends VpnService {
         String action = intent.getAction();
         if (action == null) return START_NOT_STICKY;
         switch (action) {
-            case ACTION_CONNECT:    startVpn(this, null); break;
-            case ACTION_DISCONNECT: stopVpn(this);        break;
+            case "com.dexvori.nextunnel.CONNECT":    startVpn(this, null); break;
+            case "com.dexvori.nextunnel.DISCONNECT": stopVpn(this); break;
         }
         return START_STICKY;
     }

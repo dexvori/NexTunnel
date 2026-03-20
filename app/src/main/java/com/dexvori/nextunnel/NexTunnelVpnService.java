@@ -2,22 +2,25 @@ package com.dexvori.nextunnel;
 
 import android.content.Intent;
 import android.net.VpnService;
+import android.os.ParcelFileDescriptor;
 import android.util.Log;
 
-import go.Seq;
+import java.net.InetAddress;
+
+import libv2ray.CoreCallbackHandler;
+import libv2ray.CoreController;
 import libv2ray.Libv2ray;
-import libv2ray.V2RayPoint;
-import libv2ray.V2RayVPNServiceSupportsSet;
 
 public class NexTunnelVpnService extends VpnService {
 
     private static final String TAG = "NexTunnelVPN";
 
-    private static volatile String configJson = "{}";
-    private static volatile String status     = "disconnected";
-    private static volatile long   bytesSent  = 0;
-    private static volatile long   bytesRecv  = 0;
-    private static V2RayPoint v2rayPoint;
+    private static volatile String configJson   = "{}";
+    private static volatile String status       = "disconnected";
+    private static volatile long   bytesSent    = 0;
+    private static volatile long   bytesRecv    = 0;
+    private static CoreController  coreController;
+    private ParcelFileDescriptor   tunInterface;
 
     public interface Callback {
         void onConnected();
@@ -29,37 +32,42 @@ public class NexTunnelVpnService extends VpnService {
     public static long   getBytesSent()       { return bytesSent; }
     public static long   getBytesRecv()       { return bytesRecv; }
 
-    @Override
-    public void onCreate() {
-        super.onCreate();
-        Seq.setContext(this);
-    }
-
     public static void startVpn(NexTunnelVpnService svc, Callback cb) {
         new Thread(() -> {
             try {
-                v2rayPoint = Libv2ray.newV2RayPoint(new V2RayVPNServiceSupportsSet() {
+                // Criar interface TUN
+                Builder builder = svc.new Builder();
+                builder.setSession("NexTunnel");
+                builder.addAddress("10.0.0.1", 32);
+                builder.addDnsServer("8.8.8.8");
+                builder.addRoute("0.0.0.0", 0);
+                builder.setMtu(1500);
 
-                    public int setup(String conf) { return 0; }
+                svc.tunInterface = builder.establish();
+                if (svc.tunInterface == null) {
+                    throw new Exception("Falha ao criar interface TUN");
+                }
 
-                    public int prepare() { return 0; }
+                int tunFd = svc.tunInterface.getFd();
 
-                    public int shutdown() { return 0; }
-
-                    public boolean protect(int fd) {
-                        if (svc != null) svc.protect(fd);
-                        return true;
-                    }
-
-                    public int onEmitStatus(int l, String s) {
-                        Log.i(TAG, "V2Ray: " + s);
+                coreController = Libv2ray.newCoreController(new CoreCallbackHandler() {
+                    public int startup() {
+                        Log.i(TAG, "V2Ray core iniciado");
                         return 0;
                     }
 
-                }, false);
+                    public int shutdown() {
+                        Log.i(TAG, "V2Ray core parado");
+                        return 0;
+                    }
 
-                v2rayPoint.setConfigureFileContent(configJson);
-                v2rayPoint.runLoop(false);
+                    public int onEmitStatus(int level, String msg) {
+                        Log.i(TAG, "V2Ray: " + msg);
+                        return 0;
+                    }
+                });
+
+                coreController.startLoop(configJson, tunFd);
 
                 status = "connected";
                 if (cb != null) cb.onConnected();
@@ -74,12 +82,20 @@ public class NexTunnelVpnService extends VpnService {
 
     public static void stopVpn(NexTunnelVpnService svc) {
         try {
-            if (v2rayPoint != null) {
-                v2rayPoint.stopLoop();
-                v2rayPoint = null;
+            if (coreController != null) {
+                coreController.stopLoop();
+                coreController = null;
             }
         } catch (Exception e) {
             Log.e(TAG, "stopVpn: " + e.getMessage(), e);
+        }
+        try {
+            if (svc != null && svc.tunInterface != null) {
+                svc.tunInterface.close();
+                svc.tunInterface = null;
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "fechar TUN: " + e.getMessage(), e);
         }
         status = "disconnected";
     }
@@ -101,4 +117,3 @@ public class NexTunnelVpnService extends VpnService {
         stopVpn(this);
         super.onDestroy();
     }
-}

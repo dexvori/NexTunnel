@@ -40,25 +40,20 @@ public class NexTunnelVpnService extends VpnService {
             try {
                 v2rayPoint = Libv2ray.newV2RayPoint(new V2RayVPNServiceSupportsSet() {
 
-                    // Sem @Override — implementação direta da interface Go
-                    public long setup(String conf) { return 0; }
+                    public int setup(String conf) { return 0; }
 
-                    public long prepare() { return 0; }
+                    public int prepare() { return 0; }
 
-                    public long shutdown() { return 0; }
+                    public int shutdown() { return 0; }
 
-                    public boolean protect(long fd) {
-                        if (svc != null) svc.protect((int) fd);
+                    public boolean protect(int fd) {
+                        if (svc != null) svc.protect(fd);
                         return true;
                     }
 
-                    public long onEmitStatus(long l, String s) {
+                    public int onEmitStatus(int l, String s) {
                         Log.i(TAG, "V2Ray: " + s);
                         return 0;
-                    }
-
-                    public String getVpnInterfaceName() {
-                        return "tun0";
                     }
 
                 }, false);

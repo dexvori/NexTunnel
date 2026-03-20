@@ -12,18 +12,6 @@ jobs:
       - name: Checkout código
         uses: actions/checkout@v4
 
-      - name: Mover index.html para assets
-        run: |
-          mkdir -p app/src/main/assets
-          cp app/src/main/index.html app/src/main/assets/index.html
-          echo "Tamanho: $(wc -c < app/src/main/assets/index.html) bytes"
-
-      - name: Baixar V2Ray AAR
-        run: |
-          mkdir -p app/libs
-          curl -L "https://github.com/2dust/AndroidLibV2rayLite/releases/download/v5.32.0/libv2ray.aar" -o app/libs/libv2ray.aar
-          echo "AAR size: $(wc -c < app/libs/libv2ray.aar) bytes"
-
       - name: Configurar Java 17
         uses: actions/setup-java@v4
         with:
@@ -38,8 +26,30 @@ jobs:
           gradle wrapper --gradle-version 8.4
           chmod +x gradlew
 
+      - name: Mover index.html para assets
+        run: |
+          mkdir -p app/src/main/assets
+          cp app/src/main/index.html app/src/main/assets/index.html
+          echo "Tamanho: $(wc -c < app/src/main/assets/index.html) bytes"
+
+      - name: Baixar V2Ray AAR
+        run: |
+          mkdir -p app/libs
+          curl -L "https://github.com/2dust/AndroidLibV2rayLite/releases/download/v5.32.0/libv2ray.aar" -o app/libs/libv2ray.aar
+          echo "AAR size: $(wc -c < app/libs/libv2ray.aar) bytes"
+          ls -la app/libs/
+
+      - name: Verificar estrutura
+        run: |
+          echo "=== app/libs ==="
+          ls -la app/libs/
+          echo "=== settings.gradle ==="
+          cat settings.gradle
+          echo "=== app/build.gradle ==="
+          cat app/build.gradle
+
       - name: Build APK (debug)
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleDebug --info
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

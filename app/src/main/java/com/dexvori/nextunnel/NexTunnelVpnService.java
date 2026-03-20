@@ -17,9 +17,7 @@ public class NexTunnelVpnService extends VpnService {
     private static volatile String status     = "disconnected";
     private static volatile long   bytesSent  = 0;
     private static volatile long   bytesRecv  = 0;
-
     private static V2RayPoint v2rayPoint;
-    private static NexTunnelVpnService instance;
 
     public interface Callback {
         void onConnected();
@@ -34,7 +32,6 @@ public class NexTunnelVpnService extends VpnService {
     @Override
     public void onCreate() {
         super.onCreate();
-        instance = this;
         Seq.setContext(this);
     }
 
@@ -43,24 +40,22 @@ public class NexTunnelVpnService extends VpnService {
             try {
                 v2rayPoint = Libv2ray.newV2RayPoint(new V2RayVPNServiceSupportsSet() {
                     @Override
-                    public long setup(String conf) {
+                    public int setup(String conf) { return 0; }
+
+                    @Override
+                    public int prepare() { return 0; }
+
+                    @Override
+                    public int shutdown() { return 0; }
+
+                    @Override
+                    public int protect(int fd) {
+                        if (svc != null) svc.protect(fd);
                         return 0;
                     }
+
                     @Override
-                    public long prepare() {
-                        return 0;
-                    }
-                    @Override
-                    public long shutdown() {
-                        return 0;
-                    }
-                    @Override
-                    public long protect(long fd) {
-                        if (svc != null) svc.protect((int) fd);
-                        return 0;
-                    }
-                    @Override
-                    public long onEmitStatus(long l, String s) {
+                    public int onEmitStatus(int l, String s) {
                         Log.i(TAG, "V2Ray: " + s);
                         return 0;
                     }
@@ -70,7 +65,6 @@ public class NexTunnelVpnService extends VpnService {
                 v2rayPoint.runLoop(false);
 
                 status = "connected";
-                Log.i(TAG, "V2Ray iniciado!");
                 if (cb != null) cb.onConnected();
 
             } catch (Exception e) {
@@ -108,7 +102,6 @@ public class NexTunnelVpnService extends VpnService {
     @Override
     public void onDestroy() {
         stopVpn(this);
-        instance = null;
         super.onDestroy();
     }
 }

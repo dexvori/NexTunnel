@@ -48,17 +48,17 @@ public class NexTunnelVpnService extends VpnService {
                 int tunFd = svc.tunInterface.getFd();
 
                 coreController = Libv2ray.newCoreController(new CoreCallbackHandler() {
-                    public int startup() {
+                    public long startup() {
                         Log.i(TAG, "V2Ray core iniciado");
                         return 0;
                     }
 
-                    public int shutdown() {
+                    public long shutdown() {
                         Log.i(TAG, "V2Ray core parado");
                         return 0;
                     }
 
-                    public int onEmitStatus(int level, String msg) {
+                    public long onEmitStatus(long level, String msg) {
                         Log.i(TAG, "V2Ray: " + msg);
                         return 0;
                     }

@@ -5,6 +5,8 @@ import android.net.VpnService;
 import android.os.ParcelFileDescriptor;
 import android.util.Log;
 
+import org.json.JSONObject;
+
 import libv2ray.CoreCallbackHandler;
 import libv2ray.CoreController;
 import libv2ray.Libv2ray;
@@ -13,10 +15,10 @@ public class NexTunnelVpnService extends VpnService {
 
     private static final String TAG = "NexTunnelVPN";
 
-    private static volatile String configJson  = "{}";
-    private static volatile String status      = "disconnected";
-    private static volatile long   bytesSent   = 0;
-    private static volatile long   bytesRecv   = 0;
+    private static volatile String configJson   = "{}";
+    private static volatile String status       = "disconnected";
+    private static volatile long   bytesSent    = 0;
+    private static volatile long   bytesRecv    = 0;
     private static CoreController  coreController;
     private ParcelFileDescriptor   tunInterface;
 
@@ -30,6 +32,96 @@ public class NexTunnelVpnService extends VpnService {
     public static long   getBytesSent()       { return bytesSent; }
     public static long   getBytesRecv()       { return bytesRecv; }
 
+    // Converte o config do JavaScript para JSON V2Ray válido
+    private static String buildV2RayConfig(String rawJson) {
+        try {
+            JSONObject c = new JSONObject(rawJson);
+
+            // Se já vier um JSON V2Ray completo (_v2ray = true), usa directo
+            if (c.optBoolean("_v2ray", false)) {
+                return c.getString("_config");
+            }
+
+            String proto    = c.optString("proto",    "VLESS").toUpperCase();
+            String host     = c.optString("host",     "");
+            int    port     = c.optInt   ("port",     443);
+            String uuid     = c.optString("uuid",     "");
+            String sni      = c.optString("sni",      host);
+            String bugHost  = c.optString("bug_host", sni);
+            String wsPath   = c.optString("ws_path",  "/ws");
+
+            // Escolher protocolo V2Ray
+            String protocolName = proto.equals("VMESS") ? "vmess" : "vless";
+
+            // Montar settings do utilizador
+            String userSettings;
+            if (proto.equals("VMESS")) {
+                userSettings = "{"
+                    + "\"id\":\"" + uuid + "\","
+                    + "\"alterId\":0,"
+                    + "\"security\":\"auto\""
+                    + "}";
+            } else {
+                // VLESS
+                userSettings = "{"
+                    + "\"id\":\"" + uuid + "\","
+                    + "\"encryption\":\"none\","
+                    + "\"flow\":\"\""
+                    + "}";
+            }
+
+            // Montar JSON V2Ray completo
+            String v2ray = "{"
+                + "\"log\":{\"loglevel\":\"warning\"},"
+                + "\"inbounds\":[{"
+                    + "\"port\":10808,"
+                    + "\"protocol\":\"socks\","
+                    + "\"settings\":{\"auth\":\"noauth\",\"udp\":true},"
+                    + "\"tag\":\"socks\""
+                + "}],"
+                + "\"outbounds\":[{"
+                    + "\"protocol\":\"" + protocolName + "\","
+                    + "\"settings\":{"
+                        + "\"vnext\":[{"
+                            + "\"address\":\"" + host + "\","
+                            + "\"port\":" + port + ","
+                            + "\"users\":[" + userSettings + "]"
+                        + "}]"
+                    + "},"
+                    + "\"streamSettings\":{"
+                        + "\"network\":\"ws\","
+                        + "\"security\":\"tls\","
+                        + "\"tlsSettings\":{"
+                            + "\"serverName\":\"" + bugHost + "\","
+                            + "\"allowInsecure\":true"
+                        + "},"
+                        + "\"wsSettings\":{"
+                            + "\"path\":\"" + wsPath + "\","
+                            + "\"headers\":{\"Host\":\"" + bugHost + "\"}"
+                        + "}"
+                    + "},"
+                    + "\"tag\":\"proxy\""
+                + "},{"
+                    + "\"protocol\":\"freedom\","
+                    + "\"tag\":\"direct\""
+                + "}],"
+                + "\"routing\":{"
+                    + "\"rules\":[{"
+                        + "\"type\":\"field\","
+                        + "\"ip\":[\"geoip:private\"],"
+                        + "\"outboundTag\":\"direct\""
+                    + "}]"
+                + "}"
+            + "}";
+
+            return v2ray;
+
+        } catch (Exception e) {
+            Log.e(TAG, "buildV2RayConfig erro: " + e.getMessage());
+            return "{}";
+        }
+    }
+
     public static void startVpn(NexTunnelVpnService svc, Callback cb) {
         new Thread(() -> {
             try {
@@ -37,6 +129,7 @@ public class NexTunnelVpnService extends VpnService {
                 builder.setSession("NexTunnel");
                 builder.addAddress("10.0.0.1", 32);
                 builder.addDnsServer("8.8.8.8");
+                builder.addDnsServer("1.1.1.1");
                 builder.addRoute("0.0.0.0", 0);
                 builder.setMtu(1500);
 
@@ -45,24 +138,26 @@ public class NexTunnelVpnService extends VpnService {
                     throw new Exception("Falha ao criar interface TUN");
                 }
 
+                // Converter config JS → JSON V2Ray válido
+                String v2rayJson = buildV2RayConfig(configJson);
+                Log.d(TAG, "V2Ray config: " + v2rayJson.substring(0, Math.min(200, v2rayJson.length())));
+
                 coreController = Libv2ray.newCoreController(new CoreCallbackHandler() {
                     public long startup() {
                         Log.i(TAG, "V2Ray core iniciado");
                         return 0;
                     }
-
                     public long shutdown() {
                         Log.i(TAG, "V2Ray core parado");
                         return 0;
                     }
-
                     public long onEmitStatus(long level, String msg) {
                         Log.i(TAG, "V2Ray: " + msg);
                         return 0;
                     }
                 });
 
-                coreController.startLoop(configJson);
+                coreController.startLoop(v2rayJson);
 
                 status = "connected";
                 if (cb != null) cb.onConnected();

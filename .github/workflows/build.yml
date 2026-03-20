@@ -25,6 +25,13 @@ jobs:
           echo "AAR size: $(wc -c < app/libs/libv2ray.aar) bytes"
           ls -la app/libs/
 
+      - name: Inspecionar AAR
+        run: |
+          cd app/libs
+          unzip -l libv2ray.aar | grep "\.jar\|classes"
+          unzip -p libv2ray.aar classes.jar > /tmp/classes.jar
+          jar tf /tmp/classes.jar | grep -i "v2ray\|libv2ray" | head -30
+
       - name: Configurar Java 17
         uses: actions/setup-java@v4
         with:

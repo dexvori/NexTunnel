@@ -21,7 +21,7 @@ jobs:
       - name: Baixar V2Ray AAR
         run: |
           mkdir -p app/libs
-          curl -L "https://github.com/2dust/AndroidLibV2rayLite/releases/download/v5.32.0/libv2ray.aar" -o app/libs/libv2ray.aar
+          curl -L "https://github.com/2dust/AndroidLibV2rayLite/releases/download/v2.1.1/libv2ray.aar" -o app/libs/libv2ray.aar
           echo "AAR size: $(wc -c < app/libs/libv2ray.aar) bytes"
           ls -la app/libs/
 

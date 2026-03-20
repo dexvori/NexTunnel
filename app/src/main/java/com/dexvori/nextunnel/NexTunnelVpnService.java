@@ -19,6 +19,7 @@ public class NexTunnelVpnService extends VpnService {
     private static volatile long   bytesRecv  = 0;
 
     private static V2RayPoint v2rayPoint;
+    private static NexTunnelVpnService instance;
 
     public interface Callback {
         void onConnected();
@@ -30,50 +31,38 @@ public class NexTunnelVpnService extends VpnService {
     public static long   getBytesSent()       { return bytesSent; }
     public static long   getBytesRecv()       { return bytesRecv; }
 
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        instance = this;
+        Seq.setContext(this);
+    }
+
     public static void startVpn(NexTunnelVpnService svc, Callback cb) {
         new Thread(() -> {
             try {
-                Seq.setContext(svc);
-
                 v2rayPoint = Libv2ray.newV2RayPoint(new V2RayVPNServiceSupportsSet() {
                     @Override
-                    public boolean isVpnLaunched() {
-                        return svc != null;
+                    public long setup(String conf) {
+                        return 0;
                     }
-
                     @Override
-                    public void onEmitStatus(long l, String s) {
-                        Log.i(TAG, "V2Ray status: " + s);
+                    public long prepare() {
+                        return 0;
                     }
-
                     @Override
-                    public void shutdown() {
-                        stopVpn(svc);
+                    public long shutdown() {
+                        return 0;
                     }
-
                     @Override
-                    public String getVpnInterfaceName() {
-                        return "tun0";
+                    public long protect(long fd) {
+                        if (svc != null) svc.protect((int) fd);
+                        return 0;
                     }
-
                     @Override
-                    public boolean protect(long fd) {
-                        return svc.protect((int) fd);
-                    }
-
-                    @Override
-                    public String getDnsServers() {
-                        return "1.1.1.1,8.8.8.8";
-                    }
-
-                    @Override
-                    public String getExcludedOutboundTags() {
-                        return "";
-                    }
-
-                    @Override
-                    public String getEnabledExtension() {
-                        return "";
+                    public long onEmitStatus(long l, String s) {
+                        Log.i(TAG, "V2Ray: " + s);
+                        return 0;
                     }
                 }, false);
 
@@ -81,11 +70,11 @@ public class NexTunnelVpnService extends VpnService {
                 v2rayPoint.runLoop(false);
 
                 status = "connected";
-                Log.i(TAG, "V2Ray iniciado com sucesso");
+                Log.i(TAG, "V2Ray iniciado!");
                 if (cb != null) cb.onConnected();
 
             } catch (Exception e) {
-                Log.e(TAG, "V2Ray erro: " + e.getMessage(), e);
+                Log.e(TAG, "Erro: " + e.getMessage(), e);
                 status = "error";
                 if (cb != null) cb.onError(e.getMessage() != null ? e.getMessage() : "Erro desconhecido");
             }
@@ -119,6 +108,7 @@ public class NexTunnelVpnService extends VpnService {
     @Override
     public void onDestroy() {
         stopVpn(this);
+        instance = null;
         super.onDestroy();
     }
 }

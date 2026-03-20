@@ -5,8 +5,6 @@ import android.net.VpnService;
 import android.os.ParcelFileDescriptor;
 import android.util.Log;
 
-import java.net.InetAddress;
-
 import libv2ray.CoreCallbackHandler;
 import libv2ray.CoreController;
 import libv2ray.Libv2ray;
@@ -15,10 +13,10 @@ public class NexTunnelVpnService extends VpnService {
 
     private static final String TAG = "NexTunnelVPN";
 
-    private static volatile String configJson   = "{}";
-    private static volatile String status       = "disconnected";
-    private static volatile long   bytesSent    = 0;
-    private static volatile long   bytesRecv    = 0;
+    private static volatile String configJson  = "{}";
+    private static volatile String status      = "disconnected";
+    private static volatile long   bytesSent   = 0;
+    private static volatile long   bytesRecv   = 0;
     private static CoreController  coreController;
     private ParcelFileDescriptor   tunInterface;
 
@@ -35,7 +33,6 @@ public class NexTunnelVpnService extends VpnService {
     public static void startVpn(NexTunnelVpnService svc, Callback cb) {
         new Thread(() -> {
             try {
-                // Criar interface TUN
                 Builder builder = svc.new Builder();
                 builder.setSession("NexTunnel");
                 builder.addAddress("10.0.0.1", 32);
@@ -117,3 +114,4 @@ public class NexTunnelVpnService extends VpnService {
         stopVpn(this);
         super.onDestroy();
     }
+}

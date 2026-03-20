@@ -45,8 +45,6 @@ public class NexTunnelVpnService extends VpnService {
                     throw new Exception("Falha ao criar interface TUN");
                 }
 
-                long tunFd = (long) svc.tunInterface.getFd();
-
                 coreController = Libv2ray.newCoreController(new CoreCallbackHandler() {
                     public long startup() {
                         Log.i(TAG, "V2Ray core iniciado");
@@ -64,7 +62,7 @@ public class NexTunnelVpnService extends VpnService {
                     }
                 });
 
-                coreController.startLoop(configJson, tunFd);
+                coreController.startLoop(configJson);
 
                 status = "connected";
                 if (cb != null) cb.onConnected();

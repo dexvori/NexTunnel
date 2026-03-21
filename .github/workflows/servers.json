@@ -1,0 +1,128 @@
+name: Update VPN Gate Servers
+
+on:
+  schedule:
+    - cron: '0 * * * *'   # Corre a cada hora
+  workflow_dispatch:        # Permite correr manualmente
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch VPN Gate & gerar servers.json
+        run: |
+          python3 << 'EOF'
+          import urllib.request, csv, json, base64, io, re
+
+          # Buscar API do VPN Gate
+          url = 'http://www.vpngate.net/api/iphone/'
+          req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+          with urllib.request.urlopen(req, timeout=30) as r:
+              raw = r.read().decode('utf-8', errors='ignore')
+
+          # Remover linhas de comentário (começam com *)
+          lines = [l for l in raw.splitlines() if not l.startswith('*') and l.strip()]
+          
+          reader = csv.DictReader(lines)
+          servers = []
+          
+          # Mapa de país → flag + região
+          COUNTRY_MAP = {
+            'Japan':          ('🇯🇵','ASIA'),
+            'United States':  ('🇺🇸','AMERICA'),
+            'South Korea':    ('🇰🇷','ASIA'),
+            'Germany':        ('🇩🇪','EUROPE'),
+            'France':         ('🇫🇷','EUROPE'),
+            'Netherlands':    ('🇳🇱','EUROPE'),
+            'United Kingdom': ('🇬🇧','EUROPE'),
+            'Canada':         ('🇨🇦','AMERICA'),
+            'Brazil':         ('🇧🇷','AMERICA'),
+            'Australia':      ('🇦🇺','ASIA'),
+            'Singapore':      ('🇸🇬','ASIA'),
+            'India':          ('🇮🇳','ASIA'),
+            'Russia':         ('🇷🇺','EUROPE'),
+            'Thailand':       ('🇹🇭','ASIA'),
+            'Vietnam':        ('🇻🇳','ASIA'),
+            'Indonesia':      ('🇮🇩','ASIA'),
+            'Taiwan':         ('🇹🇼','ASIA'),
+            'Hong Kong':      ('🇭🇰','ASIA'),
+            'Ukraine':        ('🇺🇦','EUROPE'),
+            'Sweden':         ('🇸🇪','EUROPE'),
+            'Poland':         ('🇵🇱','EUROPE'),
+            'Romania':        ('🇷🇴','EUROPE'),
+            'Hungary':        ('🇭🇺','EUROPE'),
+            'Spain':          ('🇪🇸','EUROPE'),
+            'Italy':          ('🇮🇹','EUROPE'),
+            'South Africa':   ('🇿🇦','AFRICA'),
+            'Kenya':          ('🇰🇪','AFRICA'),
+            'Nigeria':        ('🇳🇬','AFRICA'),
+            'Mozambique':     ('🇲🇿','AFRICA'),
+            'Mexico':         ('🇲🇽','AMERICA'),
+            'Argentina':      ('🇦🇷','AMERICA'),
+          }
+
+          seen = set()
+          for row in reader:
+              try:
+                  country  = row.get('#HostName','').strip() or row.get('CountryLong','').strip()
+                  country  = row.get('CountryLong', country).strip()
+                  ip       = row.get('IP','').strip()
+                  ping     = int(row.get('Ping','999') or 999)
+                  speed    = int(row.get('Speed','0') or 0)
+                  ovpn_b64 = row.get('OpenVPN_ConfigData_Base64','').strip()
+
+                  if not ip or not ovpn_b64 or ip in seen:
+                      continue
+                  if ping > 300 or speed < 100000:  # Filtrar servidores lentos/altos ping
+                      continue
+
+                  seen.add(ip)
+                  flag, region = COUNTRY_MAP.get(country, ('🌐', 'OTHER'))
+                  signal = 3 if ping < 80 else (2 if ping < 150 else 1)
+
+                  # Extrair porta OpenVPN do config
+                  try:
+                      ovpn = base64.b64decode(ovpn_b64).decode('utf-8', errors='ignore')
+                      port_match = re.search(r'remote\s+\S+\s+(\d+)', ovpn)
+                      port = int(port_match.group(1)) if port_match else 1194
+                  except:
+                      port = 1194
+
+                  servers.append({
+                      'flag':     flag,
+                      'name':     country + ' - OpenVPN',
+                      'region':   region,
+                      'host':     ip,
+                      'port':     port,
+                      'proto':    'OPENVPN',
+                      'sub':      f'OpenVPN | Ping: {ping}ms',
+                      'ping':     ping,
+                      'signal':   signal,
+                      'ovpn_b64': ovpn_b64
+                  })
+
+                  if len(servers) >= 100:  # Máximo 100 servidores
+                      break
+
+              except Exception as e:
+                  continue
+
+          # Ordenar por ping
+          servers.sort(key=lambda x: x['ping'])
+
+          output = {'updated': __import__('datetime').datetime.utcnow().isoformat() + 'Z', 'servers': servers}
+          with open('servers.json', 'w', encoding='utf-8') as f:
+              json.dump(output, f, ensure_ascii=False, indent=2)
+
+          print(f'✅ {len(servers)} servidores escritos em servers.json')
+          EOF
+
+      - name: Commit servers.json
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add servers.json
+          git diff --cached --quiet || git commit -m "🔄 Auto-update servers [$(date -u '+%Y-%m-%d %H:%M')] UTC"
+          git push

@@ -32,46 +32,75 @@ public class NexTunnelVpnService extends VpnService {
     public static long   getBytesSent()       { return bytesSent; }
     public static long   getBytesRecv()       { return bytesRecv; }
 
-    // Converte o config do JavaScript para JSON V2Ray válido
     private static String buildV2RayConfig(String rawJson) {
         try {
             JSONObject c = new JSONObject(rawJson);
 
-            // Se já vier um JSON V2Ray completo (_v2ray = true), usa directo
             if (c.optBoolean("_v2ray", false)) {
                 return c.getString("_config");
             }
 
-            String proto    = c.optString("proto",    "VLESS").toUpperCase();
-            String host     = c.optString("host",     "");
-            int    port     = c.optInt   ("port",     443);
-            String uuid     = c.optString("uuid",     "");
-            String sni      = c.optString("sni",      host);
-            String bugHost  = c.optString("bug_host", sni);
-            String wsPath   = c.optString("ws_path",  "/ws");
+            String proto       = c.optString("proto",       "VLESS").toUpperCase();
+            String transport   = c.optString("transport",   "ws").toLowerCase();
+            String host        = c.optString("host",        "");
+            int    port        = c.optInt   ("port",        443);
+            String uuid        = c.optString("uuid",        "");
+            String sni         = c.optString("sni",         host);
+            String bugHost     = c.optString("bug_host",    sni);
+            String wsPath      = c.optString("ws_path",     "/ws");
+            String serviceName = c.optString("service_name","grpc");
 
-            // Escolher protocolo V2Ray
-            String protocolName = proto.equals("VMESS") ? "vmess" : "vless";
+            // Se bug_host vazio, usa sni
+            if (bugHost.isEmpty()) bugHost = sni;
+            if (bugHost.isEmpty()) bugHost = host;
 
-            // Montar settings do utilizador
+            // User settings
             String userSettings;
             if (proto.equals("VMESS")) {
-                userSettings = "{"
-                    + "\"id\":\"" + uuid + "\","
-                    + "\"alterId\":0,"
-                    + "\"security\":\"auto\""
-                    + "}";
+                userSettings = "{\"id\":\"" + uuid + "\",\"alterId\":0,\"security\":\"auto\"}";
             } else {
-                // VLESS
-                userSettings = "{"
-                    + "\"id\":\"" + uuid + "\","
-                    + "\"encryption\":\"none\","
-                    + "\"flow\":\"\""
-                    + "}";
+                userSettings = "{\"id\":\"" + uuid + "\",\"encryption\":\"none\",\"flow\":\"\"}";
             }
 
-            // Montar JSON V2Ray completo
-            String v2ray = "{"
+            // Stream settings baseado no transport
+            String streamSettings;
+            switch (transport) {
+                case "grpc":
+                    streamSettings = "{"
+                        + "\"network\":\"grpc\","
+                        + "\"security\":\"tls\","
+                        + "\"tlsSettings\":{\"serverName\":\"" + bugHost + "\",\"allowInsecure\":true},"
+                        + "\"grpcSettings\":{\"serviceName\":\"" + serviceName + "\"}"
+                        + "}";
+                    break;
+                case "xhttp":
+                    streamSettings = "{"
+                        + "\"network\":\"xhttp\","
+                        + "\"security\":\"tls\","
+                        + "\"tlsSettings\":{\"serverName\":\"" + bugHost + "\",\"allowInsecure\":true},"
+                        + "\"xhttpSettings\":{\"path\":\"" + wsPath + "\",\"host\":\"" + bugHost + "\"}"
+                        + "}";
+                    break;
+                case "tcp":
+                    streamSettings = "{"
+                        + "\"network\":\"tcp\","
+                        + "\"security\":\"tls\","
+                        + "\"tlsSettings\":{\"serverName\":\"" + bugHost + "\",\"allowInsecure\":true}"
+                        + "}";
+                    break;
+                default: // ws
+                    streamSettings = "{"
+                        + "\"network\":\"ws\","
+                        + "\"security\":\"tls\","
+                        + "\"tlsSettings\":{\"serverName\":\"" + bugHost + "\",\"allowInsecure\":true},"
+                        + "\"wsSettings\":{\"path\":\"" + wsPath + "\",\"headers\":{\"Host\":\"" + bugHost + "\"}}"
+                        + "}";
+                    break;
+            }
+
+            String protocolName = proto.equals("VMESS") ? "vmess" : "vless";
+
+            return "{"
                 + "\"log\":{\"loglevel\":\"warning\"},"
                 + "\"inbounds\":[{"
                     + "\"port\":10808,"
@@ -88,18 +117,7 @@ public class NexTunnelVpnService extends VpnService {
                             + "\"users\":[" + userSettings + "]"
                         + "}]"
                     + "},"
-                    + "\"streamSettings\":{"
-                        + "\"network\":\"ws\","
-                        + "\"security\":\"tls\","
-                        + "\"tlsSettings\":{"
-                            + "\"serverName\":\"" + bugHost + "\","
-                            + "\"allowInsecure\":true"
-                        + "},"
-                        + "\"wsSettings\":{"
-                            + "\"path\":\"" + wsPath + "\","
-                            + "\"headers\":{\"Host\":\"" + bugHost + "\"}"
-                        + "}"
-                    + "},"
+                    + "\"streamSettings\":" + streamSettings + ","
                     + "\"tag\":\"proxy\""
                 + "},{"
                     + "\"protocol\":\"freedom\","
@@ -113,8 +131,6 @@ public class NexTunnelVpnService extends VpnService {
                     + "}]"
                 + "}"
             + "}";
-
-            return v2ray;
 
         } catch (Exception e) {
             Log.e(TAG, "buildV2RayConfig erro: " + e.getMessage());
@@ -138,7 +154,6 @@ public class NexTunnelVpnService extends VpnService {
                     throw new Exception("Falha ao criar interface TUN");
                 }
 
-                // Converter config JS → JSON V2Ray válido
                 String v2rayJson = buildV2RayConfig(configJson);
                 Log.d(TAG, "V2Ray config: " + v2rayJson.substring(0, Math.min(200, v2rayJson.length())));
 
